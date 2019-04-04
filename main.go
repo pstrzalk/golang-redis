@@ -1,24 +1,28 @@
 package main
 
 import (
-	lib "./lib"
-	"bufio"
 	"fmt"
-	"github.com/google/shlex"
 	"log"
 	"net"
-	"net/textproto"
-	"os"
-	"strings"
+
+	"github.com/kelseyhightower/envconfig"
 )
 
-func main() {
-	pN := portNumber()
-	fmt.Printf("Awaiting connections on port %s\n", pN)
+type config struct {
+	Port int    `envconfig:"PORT" default:"6379"`
+	Pass string `envconfig:"PASSWORD" default:"bacon"`
+}
 
+func main() {
 	memory := make(map[string]string)
 
-	listener, err := net.Listen("tcp", ":"+pN)
+	var cfg config
+	envconfig.MustProcess("", &cfg)
+
+	port := fmt.Sprintf(":%d", cfg.Port)
+	fmt.Printf("Awaiting connections on port %s\n", port)
+
+	listener, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -29,47 +33,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		go handleConnection(connection, memory)
+
+		go (&sessionHandler{
+			connection: connection,
+			memory:     memory,
+			password:   cfg.Pass,
+		}).handleConnection()
 	}
-}
-
-func portNumber() string {
-	if len(os.Args) > 1 {
-		return os.Args[1]
-	} else {
-		return "6379"
-	}
-}
-
-func handleConnection(connection net.Conn, memory map[string]string) {
-	for {
-		buffer := bufio.NewReader(connection)
-		tpReader := textproto.NewReader(buffer)
-
-		netData, err := tpReader.ReadLine()
-		if err != nil {
-			lib.RespondWithError(connection, "Protocol error: " + err.Error())
-			continue
-		}
-
-		command := strings.TrimSpace(string(netData))
-		if command == "" {
-			continue
-		}
-
-		commandToLower := strings.ToLower(command)
-		if commandToLower == "quit" {
-			lib.RespondPlain(connection, "+OK")
-			break
-		}
-
-		commandSplit, err := shlex.Split(command)
-		if err != nil {
-			lib.RespondWithError(connection, err.Error())
-			continue
-		}
-
-		lib.Respond(connection, commandSplit, memory)
-	}
-	connection.Close()
 }
