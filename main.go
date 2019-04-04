@@ -4,41 +4,51 @@ import (
 	lib "./lib"
 	"bufio"
 	"fmt"
+	"github.com/google/shlex"
+	"log"
 	"net"
+	"net/textproto"
+	"os"
 	"strings"
 )
 
-const port = ":8001"
-
-var memory map[string]string
-
 func main() {
-	fmt.Println("Awaiting connections...")
+	pN := portNumber()
+	fmt.Printf("Awaiting connections on port %s\n", pN)
 
-	memory = make(map[string]string)
+	memory := make(map[string]string)
 
-	listener, err := net.Listen("tcp4", port)
+	listener, err := net.Listen("tcp", ":"+pN)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
 	defer listener.Close()
 
 	for {
 		connection, err := listener.Accept()
 		if err != nil {
-			fmt.Println(err)
-			return
+			log.Fatal(err)
 		}
-		go handleConnection(connection)
+		go handleConnection(connection, memory)
 	}
 }
 
-func handleConnection(connection net.Conn) {
+func portNumber() string {
+	if len(os.Args) > 1 {
+		return os.Args[1]
+	} else {
+		return "6379"
+	}
+}
+
+func handleConnection(connection net.Conn, memory map[string]string) {
 	for {
-		netData, err := bufio.NewReader(connection).ReadString('\n')
+		buffer := bufio.NewReader(connection)
+		tpReader := textproto.NewReader(buffer)
+
+		netData, err := tpReader.ReadLine()
 		if err != nil {
-			lib.RespondWithError(connection, "Protocol error: "+err.Error())
+			lib.RespondWithError(connection, "Protocol error: " + err.Error())
 			continue
 		}
 
@@ -53,10 +63,10 @@ func handleConnection(connection net.Conn) {
 			break
 		}
 
-		commandSplit, err := lib.RequestParser(command)
+		commandSplit, err := shlex.Split(command)
 		if err != nil {
 			lib.RespondWithError(connection, err.Error())
-			return
+			continue
 		}
 
 		lib.Respond(connection, commandSplit, memory)
