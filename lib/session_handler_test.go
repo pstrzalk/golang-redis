@@ -1,4 +1,4 @@
-package main
+package lib
 
 import (
 	"bufio"
@@ -17,21 +17,21 @@ func (b *CloseableBuffer) Close() error {
 
 func TestHandleSingleConnection(t *testing.T) {
 	buffer := CloseableBuffer{}
-	s := sessionHandler{connection: &buffer, memory: nil, authorized: false}
+	s := SessionHandler{Connection: &buffer, Memory: nil, Authorized: false}
 
-	reader := bufio.NewReader(s.connection)
+	reader := bufio.NewReader(s.Connection)
 
 	buffer.WriteString("ping")
 	s.handleSingleConnection(reader)
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
 	buffer.Reset()
 
-	s.authorized = true
+	s.Authorized = true
 
 	buffer.WriteString("\n")
 	ret, err := s.handleSingleConnection(reader)
 	assert.Equal(t, false, ret)
-  assert.Nil(t, err)
+	assert.Nil(t, err)
 
 	buffer.WriteString("")
 	s.handleSingleConnection(reader)
@@ -50,7 +50,7 @@ func TestHandleSingleConnection(t *testing.T) {
 
 func TestRespondWithNoAuth(t *testing.T) {
 	buffer := CloseableBuffer{}
-	s := sessionHandler{connection: &buffer, memory: nil}
+	s := SessionHandler{Connection: &buffer, Memory: nil}
 
 	s.RespondWithNoAuth()
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
@@ -58,7 +58,7 @@ func TestRespondWithNoAuth(t *testing.T) {
 
 func TestHandleAuth(t *testing.T) {
 	buffer := CloseableBuffer{}
-	s := sessionHandler{connection: &buffer, memory: nil, password: "PASS"}
+	s := SessionHandler{Connection: &buffer, Memory: nil, Password: "PASS"}
 
 	s.HandleAuth([]string{"auth", "b", "c"})
 	assert.Equal(t, "-ERR wrong number of arguments for 'auth' command\n", buffer.String())
@@ -77,13 +77,13 @@ func TestHandleSet(t *testing.T) {
 	buffer := CloseableBuffer{}
 	memory := make(map[string]string)
 
-	s := sessionHandler{connection: &buffer, memory: memory, authorized: false}
+	s := SessionHandler{Connection: &buffer, Memory: memory, Authorized: false}
 
 	s.HandleSet([]string{"SET", "key", "val"})
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
 	buffer.Reset()
 
-	s.authorized = true
+	s.Authorized = true
 
 	s.HandleSet([]string{"set", "b"})
 	assert.Equal(t, "-ERR wrong number of arguments for 'set' command\n", buffer.String())
@@ -100,13 +100,13 @@ func TestHandleGet(t *testing.T) {
 	memory := make(map[string]string)
 	memory["key"] = "val"
 
-	s := sessionHandler{connection: &buffer, memory: memory, authorized: false}
+	s := SessionHandler{Connection: &buffer, Memory: memory, Authorized: false}
 
 	s.HandleGet([]string{"get", "key"})
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
 	buffer.Reset()
 
-	s.authorized = true
+	s.Authorized = true
 
 	s.HandleGet([]string{"get", "a", "b"})
 	assert.Equal(t, "-ERR wrong number of arguments for 'get' command\n", buffer.String())
@@ -126,13 +126,13 @@ func TestHandleDel(t *testing.T) {
 	memory := make(map[string]string)
 	memory["key"] = "val"
 
-	s := sessionHandler{connection: &buffer, memory: memory, authorized: false}
+	s := SessionHandler{Connection: &buffer, Memory: memory, Authorized: false}
 
 	s.HandleDel([]string{"del", "key"})
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
 	buffer.Reset()
 
-	s.authorized = true
+	s.Authorized = true
 
 	s.HandleDel([]string{"del"})
 	assert.Equal(t, "-ERR wrong number of arguments for 'del' command\n", buffer.String())
@@ -149,13 +149,13 @@ func TestHandleDel(t *testing.T) {
 func TestPing(t *testing.T) {
 	buffer := CloseableBuffer{}
 
-	s := sessionHandler{connection: &buffer, memory: nil, authorized: false}
+	s := SessionHandler{Connection: &buffer, Memory: nil, Authorized: false}
 
 	s.HandlePing([]string{"ping"})
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
 	buffer.Reset()
 
-	s.authorized = true
+	s.Authorized = true
 
 	s.HandlePing([]string{"ping", "a", "b"})
 	assert.Equal(t, "-ERR wrong number of arguments for 'ping' command\n", buffer.String())
@@ -174,7 +174,7 @@ func TestRespond(t *testing.T) {
 	buffer := CloseableBuffer{}
 	memory := make(map[string]string)
 
-	s := sessionHandler{connection: &buffer, memory: memory, password: "PASS", authorized: false}
+	s := SessionHandler{Connection: &buffer, Memory: memory, Password: "PASS", Authorized: false}
 	s.Respond([]string{"get"})
 	assert.Equal(t, "-NOAUTH Authentication required.\n", buffer.String())
 	buffer.Reset()

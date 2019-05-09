@@ -1,4 +1,4 @@
-package main
+package lib
 
 import (
 	"bufio"
@@ -10,16 +10,16 @@ import (
 	"github.com/google/shlex"
 )
 
-type sessionHandler struct {
-	connection io.ReadWriteCloser
-	memory     map[string]string
-	password   string
-	authorized bool
+type SessionHandler struct {
+	Connection io.ReadWriteCloser
+	Memory     Store
+	Password   string
+	Authorized bool
 }
 
-func (s *sessionHandler) handleConnection() {
-	defer s.connection.Close()
-	reader := bufio.NewReader(s.connection)
+func (s *SessionHandler) HandleConnection() {
+	defer s.Connection.Close()
+	reader := bufio.NewReader(s.Connection)
 
 	for {
 		finish, _ := s.handleSingleConnection(reader)
@@ -29,7 +29,7 @@ func (s *sessionHandler) handleConnection() {
 	}
 }
 
-func (s *sessionHandler) handleSingleConnection(reader *bufio.Reader) (bool, error) {
+func (s *SessionHandler) handleSingleConnection(reader *bufio.Reader) (bool, error) {
 	tpReader := textproto.NewReader(reader)
 
 	netData, err := tpReader.ReadLine()
@@ -59,7 +59,7 @@ func (s *sessionHandler) handleSingleConnection(reader *bufio.Reader) (bool, err
 	return false, nil
 }
 
-func (s *sessionHandler) Respond(commandSplit []string) {
+func (s *SessionHandler) Respond(commandSplit []string) {
 	baseCommand := strings.ToLower(commandSplit[0])
 
 	if baseCommand == "auth" {
@@ -77,19 +77,19 @@ func (s *sessionHandler) Respond(commandSplit []string) {
 	}
 }
 
-func (s *sessionHandler) HandleAuth(commandSplit []string) {
+func (s *SessionHandler) HandleAuth(commandSplit []string) {
 	if len(commandSplit) > 2 {
 		s.RespondWithError("wrong number of arguments for 'auth' command")
-	} else if commandSplit[1] == s.password {
-		s.authorized = true
+	} else if commandSplit[1] == s.Password {
+		s.Authorized = true
 		s.RespondPlain("+OK")
 	} else {
 		s.RespondWithError("invalid password")
 	}
 }
 
-func (s *sessionHandler) HandleSet(commandSplit []string) {
-	if !s.authorized {
+func (s *SessionHandler) HandleSet(commandSplit []string) {
+	if !s.Authorized {
 		s.RespondWithNoAuth()
 		return
 	}
@@ -97,13 +97,13 @@ func (s *sessionHandler) HandleSet(commandSplit []string) {
 	if len(commandSplit) == 2 {
 		s.RespondWithError("wrong number of arguments for 'set' command")
 	} else {
-		s.memory[commandSplit[1]] = commandSplit[2]
+		s.Memory.Set(commandSplit[1], commandSplit[2])
 		s.RespondPlain("+OK")
 	}
 }
 
-func (s *sessionHandler) HandleGet(commandSplit []string) {
-	if !s.authorized {
+func (s *SessionHandler) HandleGet(commandSplit []string) {
+	if !s.Authorized {
 		s.RespondWithNoAuth()
 		return
 	}
@@ -111,7 +111,7 @@ func (s *sessionHandler) HandleGet(commandSplit []string) {
 	if len(commandSplit) != 2 {
 		s.RespondWithError("wrong number of arguments for 'get' command")
 	} else {
-		value, ok := s.memory[commandSplit[1]]
+		value, ok, _ := s.Memory.Get(commandSplit[1])
 
 		if ok {
 			s.RespondWithValue(value)
@@ -121,8 +121,8 @@ func (s *sessionHandler) HandleGet(commandSplit []string) {
 	}
 }
 
-func (s *sessionHandler) HandleDel(commandSplit []string) {
-	if !s.authorized {
+func (s *SessionHandler) HandleDel(commandSplit []string) {
+	if !s.Authorized {
 		s.RespondWithNoAuth()
 		return
 	}
@@ -133,18 +133,18 @@ func (s *sessionHandler) HandleDel(commandSplit []string) {
 		numberOfDeletes := 0
 
 		for i := 1; i < len(commandSplit); i++ {
-			_, ok := s.memory[commandSplit[i]]
+			_, ok, _ := s.Memory.Get(commandSplit[i])
 			if ok {
 				numberOfDeletes += 1
+				s.Memory.Delete(commandSplit[i])
 			}
-			delete(s.memory, commandSplit[i])
 		}
 		s.RespondPlain(fmt.Sprintf(":%d", numberOfDeletes))
 	}
 }
 
-func (s *sessionHandler) HandlePing(commandSplit []string) {
-	if !s.authorized {
+func (s *SessionHandler) HandlePing(commandSplit []string) {
+	if !s.Authorized {
 		s.RespondWithNoAuth()
 		return
 	}
@@ -158,22 +158,22 @@ func (s *sessionHandler) HandlePing(commandSplit []string) {
 	}
 }
 
-func (s *sessionHandler) RespondWithNoAuth() {
+func (s *SessionHandler) RespondWithNoAuth() {
 	message := "-NOAUTH Authentication required.\n"
-	s.connection.Write([]byte(message))
+	s.Connection.Write([]byte(message))
 }
 
-func (s *sessionHandler) RespondWithError(response string) {
+func (s *SessionHandler) RespondWithError(response string) {
 	message := fmt.Sprintf("-ERR %s\n", response)
-	s.connection.Write([]byte(message))
+	s.Connection.Write([]byte(message))
 }
 
-func (s *sessionHandler) RespondWithValue(response string) {
+func (s *SessionHandler) RespondWithValue(response string) {
 	message := fmt.Sprintf("$%d\n", len(response))
-	s.connection.Write([]byte(message))
+	s.Connection.Write([]byte(message))
 	s.RespondPlain(response)
 }
 
-func (s *sessionHandler) RespondPlain(response string) {
-	s.connection.Write([]byte(response + "\n"))
+func (s *SessionHandler) RespondPlain(response string) {
+	s.Connection.Write([]byte(response + "\n"))
 }

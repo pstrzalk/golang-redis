@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/kelseyhightower/envconfig"
+	"github.com/pstrzalk/redis-workshop/lib"
 )
 
 type config struct {
@@ -14,8 +15,6 @@ type config struct {
 }
 
 func main() {
-	memory := make(map[string]string)
-
 	var cfg config
 	envconfig.MustProcess("", &cfg)
 
@@ -30,17 +29,18 @@ func main() {
 
 	sessionAuthorized := cfg.Pass == ""
 
+
 	for {
 		connection, err := listener.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		go (&sessionHandler{
-			connection: connection,
-			memory:     memory,
-			password:   cfg.Pass,
-			authorized: sessionAuthorized,
-		}).handleConnection()
+		go (&lib.SessionHandler{
+			Connection: connection,
+			Memory:     lib.NewDynamodbStore(),
+			Password:   cfg.Pass,
+			Authorized: sessionAuthorized,
+		}).HandleConnection()
 	}
 }
